@@ -263,6 +263,7 @@
   .hist-btn { font-family:'Barlow Condensed',sans-serif; font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; border:none; border-radius:6px; padding:6px 12px; cursor:pointer; transition:all 0.2s; }
   .hist-btn-view { background:rgba(29,114,232,0.12); border:1px solid rgba(29,114,232,0.3); color:var(--hawk-blue-light); }
   .hist-btn-del { background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.2); color:#ef4444; }
+  .hist-btn-anular { background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.35); color:#ef4444; }
 
   /* ── CONFIG PAGE ── */
   .config-section { margin-bottom:20px; }
@@ -541,6 +542,36 @@
       <div style="display:flex;gap:8px">
         <button class="btn-print" onclick="window.print()" style="background:rgba(29,114,232,0.15);border:1px solid #1d72e8;color:#3d9bff">🖨 Imprimir</button>
         <button class="btn-print" onclick="guardarDesdeModal()">💾 Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL ANULAR FACTURA -->
+<div id="anularModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:2000;overflow:auto;padding:20px 16px;padding-top:calc(20px + env(safe-area-inset-top));backdrop-filter:blur(6px)">
+  <div style="max-width:480px;margin:0 auto;background:#0d1117;border:1px solid #ef4444;border-radius:16px;overflow:hidden;box-shadow:0 20px 80px rgba(239,68,68,0.2);animation:modalIn 0.3s cubic-bezier(.16,1,.3,1)">
+    <div style="background:linear-gradient(135deg,#1a0808,#120606);padding:20px 22px;border-bottom:1px solid #3a1010">
+      <div style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700;letter-spacing:3px;color:#ef4444;text-transform:uppercase">🚫 Anular Factura</div>
+      <div id="anularSubtitle" style="font-size:12px;color:#7a90a6;margin-top:5px"></div>
+    </div>
+    <div style="padding:22px">
+      <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.3);border-radius:10px;padding:14px 16px;font-size:13px;color:#f59e0b;margin-bottom:20px;line-height:1.8">
+        ⚠ <strong>Esta acción:</strong><br>
+        • Marca la factura como <strong>ANULADA</strong><br>
+        • Devuelve el stock de los productos<br>
+        • El registro queda guardado en el historial
+      </div>
+      <div id="anularItemsList" style="background:rgba(255,255,255,0.03);border:1px solid #1a2535;border-radius:10px;padding:14px;margin-bottom:20px;font-size:13px;color:#c8d4e0;line-height:2"></div>
+      <div id="anularResultado" style="display:none;border-radius:8px;padding:12px 16px;font-size:13px;margin-bottom:16px"></div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <button id="btnAnularConfirmar" onclick="confirmarAnulacion()"
+          style="font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;text-transform:uppercase;background:linear-gradient(135deg,#b91c1c,#991b1b);border:none;color:#fff;padding:15px;border-radius:10px;cursor:pointer;width:100%;box-shadow:0 4px 16px rgba(239,68,68,0.3)">
+          🚫 Confirmar Anulación
+        </button>
+        <button onclick="cerrarAnularModal()"
+          style="font-family:'Barlow Condensed',sans-serif;font-size:13px;font-weight:700;letter-spacing:2px;text-transform:uppercase;background:rgba(255,255,255,0.05);border:1px solid #1a2535;color:#7a90a6;padding:13px;border-radius:10px;cursor:pointer;width:100%">
+          Cancelar
+        </button>
       </div>
     </div>
   </div>
@@ -974,7 +1005,10 @@ function renderHistorial() {
       <div class="hist-items">${itemsStr}</div>
       <div class="hist-btn-row">
         <button class="hist-btn hist-btn-view" onclick="verFactura(${f.id})">👁 Ver</button>
-        <button class="hist-btn hist-btn-del" onclick="eliminarFactura(${f.id})">🗑 Eliminar</button>
+        ${f.estado === 'Anulada'
+          ? `<button class="hist-btn hist-btn-del" onclick="eliminarFactura(${f.id})">🗑 Eliminar</button>`
+          : `<button class="hist-btn hist-btn-anular" onclick="abrirAnularFactura(${f.id})">🚫 Anular</button>`
+        }
       </div>
     </div>`;
   }).join('');
@@ -1030,6 +1064,63 @@ function verFactura(id) {
       </div>
     </div>`;
   document.getElementById('previewModal').classList.add('open');
+}
+
+let _anularId = null;
+
+function abrirAnularFactura(id) {
+  const f = facturas.find(x => x.id === id);
+  if (!f) return;
+  _anularId = id;
+  document.getElementById('anularSubtitle').innerHTML =
+    `Factura <strong style="color:#f0f4f8">${f.factura}</strong> · Cliente: <strong style="color:#f0f4f8">${f.cliente}</strong> · <span style="color:#4ade80">${fmt(f.total)}</span>`;
+  document.getElementById('anularItemsList').innerHTML =
+    '<strong style="color:#7a90a6;font-size:11px;letter-spacing:1px;text-transform:uppercase">Productos a restaurar:</strong><br>' +
+    f.items.map(i => `• ${i.desc} <span style="color:#3d9bff">x${i.qty}</span>`).join('<br>');
+  document.getElementById('anularResultado').style.display = 'none';
+  document.getElementById('btnAnularConfirmar').disabled = false;
+  document.getElementById('btnAnularConfirmar').textContent = '🚫 Confirmar Anulación';
+  document.getElementById('anularModal').style.display = 'block';
+}
+
+function cerrarAnularModal() {
+  document.getElementById('anularModal').style.display = 'none';
+  _anularId = null;
+}
+
+function confirmarAnulacion() {
+  const f = facturas.find(x => x.id === _anularId);
+  if (!f) return;
+
+  // Restore stock in memory
+  const restaurados = [];
+  f.items.forEach(item => {
+    const prod = inventario.find(p => p.nombre.trim().toLowerCase() === item.desc.trim().toLowerCase());
+    if (prod) {
+      prod.stock += item.qty;
+      restaurados.push(`${item.desc} (+${item.qty})`);
+    }
+  });
+
+  // Mark as anulada
+  f.estado = 'Anulada';
+  saveFacturas();
+  renderHistorial();
+  renderStats();
+
+  const btn = document.getElementById('btnAnularConfirmar');
+  btn.disabled = true;
+  btn.textContent = '✅ Anulada';
+
+  const el = document.getElementById('anularResultado');
+  el.style.display = 'block';
+  el.innerHTML = `✅ Factura <strong>${f.factura}</strong> anulada.<br>Stock restaurado: ${restaurados.length ? restaurados.join(', ') : 'ninguno'}`;
+  el.style.background = 'rgba(34,197,94,0.1)';
+  el.style.border = '1px solid #22c55e';
+  el.style.color = '#4ade80';
+
+  showToast('✅ Factura anulada y stock restaurado', 'success');
+  setTimeout(() => cerrarAnularModal(), 2000);
 }
 
 function eliminarFactura(id) {
