@@ -518,6 +518,80 @@
 </div>
 
 <!-- ══════════════ TAB BAR ══════════════ -->
+
+<!-- ══════════════ GASTOS PAGE ══════════════ -->
+<div class="page" id="page-gastos">
+  <div class="topbar">
+    <div class="topbar-title">Gastos / Compras</div>
+    <div class="topbar-badge" id="gastosCountBadge">0 gastos</div>
+  </div>
+
+  <div class="section-title">Nuevo gasto</div>
+  <div class="panel">
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Fecha *</label>
+        <input type="date" id="gastoFecha">
+      </div>
+      <div class="form-group">
+        <label>Estado</label>
+        <select id="gastoEstado">
+          <option>Pagado</option>
+          <option>Abono</option>
+          <option>Pendiente</option>
+        </select>
+      </div>
+      <div class="form-group full">
+        <label>Proveedor *</label>
+        <input type="text" id="gastoProveedor" placeholder="Nombre del proveedor">
+      </div>
+      <div class="form-group full">
+        <label>Producto / Servicio *</label>
+        <input type="text" id="gastoProducto" placeholder="Descripción del gasto">
+      </div>
+      <div class="form-group">
+        <label>Categoría</label>
+        <select id="gastoCategoria">
+          <option>INVENTARIO</option>
+          <option>DOCUMENTOS</option>
+          <option>SERVICIOS</option>
+          <option>ARRIENDO</option>
+          <option>TRANSPORTE</option>
+          <option>MARKETING</option>
+          <option>OTRO</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Cantidad</label>
+        <input type="number" id="gastoCantidad" value="1" min="1" inputmode="numeric" oninput="calcGasto()">
+      </div>
+      <div class="form-group">
+        <label>Costo unitario ($)</label>
+        <input type="number" id="gastoCosto" value="0" min="0" step="1000" inputmode="numeric" oninput="calcGasto()">
+      </div>
+      <div class="form-group">
+        <label>IVA ($)</label>
+        <input type="number" id="gastoIva" value="0" min="0" step="1000" inputmode="numeric" oninput="calcGasto()">
+      </div>
+      <div class="form-group">
+        <label>Pendiente ($)</label>
+        <input type="number" id="gastoPendiente" value="0" min="0" step="1000" inputmode="numeric">
+      </div>
+    </div>
+    <div class="totals-box" style="margin-top:12px">
+      <div class="totals-row"><span>Subtotal</span><span id="gastoSubtotalDisplay">$0</span></div>
+      <div class="totals-row"><span>IVA</span><span id="gastoIvaDisplay">$0</span></div>
+      <div class="totals-row grand"><span>TOTAL</span><span id="gastoTotalDisplay">$0</span></div>
+    </div>
+    <button class="btn btn-success" style="margin-top:14px" onclick="guardarGasto()">💾 Registrar gasto</button>
+  </div>
+
+  <div class="section-title" style="margin-top:8px">Historial de gastos</div>
+  <div id="gastosList">
+    <div class="empty-state"><div class="empty-icon">💸</div><p>Cargando gastos...</p></div>
+  </div>
+</div>
+
 <nav class="tab-bar">
   <button class="tab-btn active" onclick="showPage('factura', this)">
     <span class="tab-icon">🧾</span>
@@ -530,6 +604,10 @@
   <button class="tab-btn" onclick="showPage('historial', this)">
     <span class="tab-icon">📋</span>
     <span>Historial</span>
+  </button>
+  <button class="tab-btn" onclick="showPage('gastos', this)">
+    <span class="tab-icon">💸</span>
+    <span>Gastos</span>
   </button>
   <button class="tab-btn" onclick="showPage('config', this)">
     <span class="tab-icon">⚙️</span>
@@ -619,6 +697,7 @@ function showPage(name, btn) {
   btn.classList.add('active');
   if (name === 'inventario') renderInventario();
   if (name === 'historial')  { renderHistorial(); renderStats(); }
+  if (name === 'gastos')     { cargarGastosCloud(); document.getElementById('gastoFecha').valueAsDate = new Date(); }
   if (name === 'config')     renderStats();
 }
 
@@ -1331,6 +1410,100 @@ function showToast(msg, type='info') {
   t.className = 'show ' + type;
   clearTimeout(t._timer);
   t._timer = setTimeout(() => { t.className = type; }, 3500);
+}
+
+
+// ══ GASTOS ════════════════════════════════════════════
+function calcGasto() {
+  const cant  = parseFloat(document.getElementById('gastoCantidad').value)||0;
+  const costo = parseFloat(document.getElementById('gastoCosto').value)||0;
+  const iva   = parseFloat(document.getElementById('gastoIva').value)||0;
+  const sub   = cant * costo;
+  document.getElementById('gastoSubtotalDisplay').textContent = fmt(sub);
+  document.getElementById('gastoIvaDisplay').textContent      = fmt(iva);
+  document.getElementById('gastoTotalDisplay').textContent    = fmt(sub + iva);
+}
+
+async function guardarGasto() {
+  const proveedor = document.getElementById('gastoProveedor').value.trim();
+  const producto  = document.getElementById('gastoProducto').value.trim();
+  if (!proveedor || !producto) { showToast('Completa proveedor y producto', 'error'); return; }
+
+  const btn = document.querySelector('#page-gastos .btn-success');
+  if (btn) { btn.disabled=true; btn.textContent='⏳ Guardando...'; }
+
+  const cant  = parseFloat(document.getElementById('gastoCantidad').value)||1;
+  const costo = parseFloat(document.getElementById('gastoCosto').value)||0;
+  const iva   = parseFloat(document.getElementById('gastoIva').value)||0;
+
+  const payload = {
+    action:     'guardarGasto',
+    fecha:      document.getElementById('gastoFecha').value || new Date().toISOString().split('T')[0],
+    proveedor,
+    producto,
+    categoria:  document.getElementById('gastoCategoria').value,
+    cantidad:   cant,
+    costoUnit:  costo,
+    iva,
+    estado:     document.getElementById('gastoEstado').value,
+    pendiente:  document.getElementById('gastoPendiente').value||0
+  };
+
+  try {
+    setSyncStatus('syncing');
+    const res  = await fetch(GS_URL, {method:'POST', body:JSON.stringify(payload)});
+    const data = await res.json();
+    if (data.ok) {
+      setSyncStatus('ok');
+      showToast('✅ Gasto ' + data.comNum + ' registrado en Excel', 'success');
+      // Reset form
+      document.getElementById('gastoProveedor').value = '';
+      document.getElementById('gastoProducto').value  = '';
+      document.getElementById('gastoCantidad').value  = '1';
+      document.getElementById('gastoCosto').value     = '0';
+      document.getElementById('gastoIva').value       = '0';
+      document.getElementById('gastoPendiente').value = '0';
+      calcGasto();
+      cargarGastosCloud();
+    } else {
+      throw new Error(data.msg || 'Error');
+    }
+  } catch(err) {
+    setSyncStatus('error');
+    showToast('⚠ Error al guardar gasto: ' + err.message, 'error');
+  }
+  if (btn) { btn.disabled=false; btn.textContent='💾 Registrar gasto'; }
+}
+
+async function cargarGastosCloud() {
+  try {
+    const res  = await fetch(GS_URL + '?action=getGastos');
+    const data = await res.json();
+    const list = document.getElementById('gastosList');
+    const badge = document.getElementById('gastosCountBadge');
+    if (!data.ok || !data.gastos.length) {
+      if (badge) badge.textContent = '0 gastos';
+      list.innerHTML = '<div class="empty-state"><div class="empty-icon">💸</div><p>No hay gastos registrados aún</p></div>';
+      return;
+    }
+    const gastos = data.gastos.reverse();
+    if (badge) badge.textContent = gastos.length + ' gastos';
+    list.innerHTML = gastos.map(g => {
+      const estadoClass = g.estado==='Pagado'?'badge-green': g.estado==='Abono'?'badge-yellow':'badge-red';
+      return '<div class="hist-card">' +
+        '<div class="hist-top">' +
+          '<div><div class="hist-num">' + g.factura + '</div><div class="hist-date">' + g.fecha + '</div></div>' +
+          '<span class="badge ' + estadoClass + '">' + g.estado + '</span>' +
+        '</div>' +
+        '<div class="hist-cliente">🏪 ' + g.proveedor + '</div>' +
+        '<div style="font-size:13px;color:var(--hawk-silver-dim);margin:3px 0">' + g.producto + ' · ' + g.categoria + '</div>' +
+        '<div class="hist-total" style="color:var(--hawk-red)">-' + fmt(g.total) + '</div>' +
+      '</div>';
+    }).join('');
+  } catch(e) {
+    document.getElementById('gastosList').innerHTML =
+      '<div class="empty-state"><div class="empty-icon">⚠</div><p>Sin conexión</p></div>';
+  }
 }
 
 // ── START ─────────────────────────────────────────────
